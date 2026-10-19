@@ -1,0 +1,21 @@
+
+# Dataset files — keep large datasets out of GitHub
+data/*.csv
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+.venv_*/
+
+# Environment secrets
+.env
+.env.*
+
+# macOS files
+.DS_Store
+
+# Generated model artifacts
+*.joblib
+*.pkl
+*.pickle
