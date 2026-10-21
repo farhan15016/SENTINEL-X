@@ -23,6 +23,11 @@ MAX_BODY_BYTES = 100_000
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "models" / "random_forest.joblib"
 
+ALLOWED_ORIGINS = {
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+}
+
 _model = None
 
 logging.basicConfig(
@@ -227,12 +232,31 @@ def predict_network_event(event):
 class SentinelHandler(BaseHTTPRequestHandler):
     """HTTP request handler for SENTINEL-X."""
 
+    def send_cors_headers(self):
+        """Allow requests from the local development frontend."""
+
+        origin = self.headers.get("Origin", "")
+
+        if origin in ALLOWED_ORIGINS:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+
+        self.send_header(
+            "Access-Control-Allow-Methods",
+            "GET, POST, OPTIONS",
+        )
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type",
+        )
+
     def send_json(self, data, status_code=200):
         """Send a JSON response with consistent headers."""
 
         body = json.dumps(data, allow_nan=False).encode("utf-8")
 
         self.send_response(status_code)
+        self.send_cors_headers()
         self.send_header(
             "Content-Type",
             "application/json; charset=utf-8",
@@ -242,6 +266,14 @@ class SentinelHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        """Handle browser CORS preflight requests."""
+
+        self.send_response(204)
+        self.send_cors_headers()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def read_json_body(self):
         """Read and validate a bounded JSON request body."""
