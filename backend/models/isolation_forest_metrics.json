@@ -1,0 +1,46 @@
+{
+  "model": "IsolationForest",
+  "training_strategy": "normal_training_records_only",
+  "training_normal_records": 56000,
+  "testing_records": 82332,
+  "accuracy": 0.5529563231793228,
+  "confusion_matrix": [
+    [
+      36672,
+      328
+    ],
+    [
+      36478,
+      8854
+    ]
+  ],
+  "classification_report": {
+    "Normal": {
+      "precision": 0.501326042378674,
+      "recall": 0.9911351351351352,
+      "f1-score": 0.6658556513844757,
+      "support": 37000.0
+    },
+    "Attack": {
+      "precision": 0.9642779350903943,
+      "recall": 0.19531456807553163,
+      "f1-score": 0.3248339875995157,
+      "support": 45332.0
+    },
+    "accuracy": 0.5529563231793228,
+    "macro avg": {
+      "precision": 0.7328019887345341,
+      "recall": 0.5932248516053334,
+      "f1-score": 0.4953448194919957,
+      "support": 82332.0
+    },
+    "weighted avg": {
+      "precision": 0.7562273590041381,
+      "recall": 0.5529563231793228,
+      "f1-score": 0.47808911999085224,
+      "support": 82332.0
+    }
+  },
+  "contamination": 0.01,
+  "random_state": 42
+}
