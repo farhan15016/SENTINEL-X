@@ -1,8 +1,10 @@
 
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 import json
+import logging
 import math
 
 import joblib
@@ -16,11 +18,32 @@ import pandas as pd
 PROJECT_NAME = "SENTINEL-X"
 HOST = "127.0.0.1"
 PORT = 8000
+MAX_BODY_BYTES = 100_000
 
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "models" / "random_forest.joblib"
 
 _model = None
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger("sentinel_x")
+
+
+# ============================================================
+# SHARED UTILITIES
+# ============================================================
+
+def utc_timestamp():
+    """Return the current UTC timestamp."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def request_path(handler):
+    """Return the URL path without query parameters."""
+    return urlsplit(handler.path).path
 
 
 # ============================================================
@@ -32,39 +55,67 @@ def analyse_network_event(event):
 
     alerts = []
 
-    failed_logins = event.get("failed_logins", 0)
-    requests_per_minute = event.get("requests_per_minute", 0)
-    bytes_sent = event.get("bytes_sent", 0)
+    failed_logins = event["failed_logins"]
+    requests_per_minute = event["requests_per_minute"]
+    bytes_sent = event["bytes_sent"]
 
     if failed_logins >= 10:
         alerts.append({
             "rule": "MULTIPLE_FAILED_LOGINS",
             "severity": "high",
-            "reason": f"{failed_logins} failed login attempts detected."
+            "reason": f"{failed_logins} failed login attempts detected.",
         })
 
     if requests_per_minute >= 500:
         alerts.append({
             "rule": "HIGH_REQUEST_RATE",
             "severity": "high",
-            "reason": f"{requests_per_minute} requests per minute detected."
+            "reason": f"{requests_per_minute} requests per minute detected.",
         })
 
     if bytes_sent >= 100_000_000:
         alerts.append({
             "rule": "HIGH_OUTBOUND_DATA",
             "severity": "medium",
-            "reason": f"{bytes_sent} bytes sent."
+            "reason": f"{bytes_sent} bytes sent.",
         })
 
     return {
         "project": PROJECT_NAME,
         "engine": "Rule-based",
-        "flagged": len(alerts) > 0,
+        "flagged": bool(alerts),
         "alert_count": len(alerts),
         "alerts": alerts,
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": utc_timestamp(),
     }
+
+
+def validate_rule_event(event):
+    """Validate all required fields for rule-based analysis."""
+
+    limits = {
+        "failed_logins": 1_000_000,
+        "requests_per_minute": 1_000_000_000,
+        "bytes_sent": 1_000_000_000_000,
+    }
+
+    for key, maximum in limits.items():
+        if key not in event:
+            raise ValueError(f"Missing required field: {key}")
+
+        value = event[key]
+
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+            or value > maximum
+            or not float(value).is_integer()
+        ):
+            raise ValueError(f"Invalid value for {key}")
+
+    return event
 
 
 # ============================================================
@@ -79,11 +130,17 @@ def load_model():
     if _model is None:
         if not MODEL_PATH.is_file():
             raise FileNotFoundError(
-                f"Trained model not found: {MODEL_PATH}. "
+                "Trained model is unavailable. "
                 "Run backend/train_model.py first."
             )
 
-        _model = joblib.load(MODEL_PATH)
+        loaded_model = joblib.load(MODEL_PATH)
+
+        if not hasattr(loaded_model, "feature_names_in_"):
+            raise RuntimeError("The saved model has no feature schema.")
+
+        _model = loaded_model
+        logger.info("Random Forest model loaded successfully.")
 
     return _model
 
@@ -92,13 +149,6 @@ def predict_network_event(event):
     """Predict normal or attack using the trained ML pipeline."""
 
     model = load_model()
-
-    if not hasattr(model, "feature_names_in_"):
-        raise RuntimeError(
-            "The saved model has no feature schema. "
-            "Check backend/train_model.py."
-        )
-
     feature_names = list(model.feature_names_in_)
 
     missing_features = [
@@ -109,7 +159,7 @@ def predict_network_event(event):
         return {
             "error": "Missing required model features",
             "missing_features": missing_features,
-            "required_feature_count": len(feature_names)
+            "required_feature_count": len(feature_names),
         }, 400
 
     features = {}
@@ -118,15 +168,11 @@ def predict_network_event(event):
         value = event[name]
 
         if value is None or isinstance(value, bool):
-            raise ValueError(
-                f"Invalid value for feature '{name}'."
-            )
+            raise ValueError(f"Invalid value for feature '{name}'.")
 
         if isinstance(value, str):
             if not value.strip():
-                raise ValueError(
-                    f"Feature '{name}' cannot be empty."
-                )
+                raise ValueError(f"Feature '{name}' cannot be empty.")
             features[name] = value
 
         elif isinstance(value, (int, float)):
@@ -141,13 +187,10 @@ def predict_network_event(event):
                 f"Unsupported value type for feature '{name}'."
             )
 
-    # The saved pipeline handles categorical encoding and imputation.
-    input_data = pd.DataFrame(
-        [features],
-        columns=feature_names
-    )
+    input_data = pd.DataFrame([features], columns=feature_names)
 
     prediction = model.predict(input_data)[0]
+    label = int(prediction)
 
     probabilities = None
 
@@ -155,14 +198,12 @@ def predict_network_event(event):
         probability_values = model.predict_proba(input_data)[0]
 
         probabilities = {
-            str(label): round(float(probability), 4)
-            for label, probability in zip(
+            str(class_label): round(float(probability), 4)
+            for class_label, probability in zip(
                 model.classes_,
-                probability_values
+                probability_values,
             )
         }
-
-    label = int(prediction)
 
     return {
         "project": PROJECT_NAME,
@@ -170,11 +211,12 @@ def predict_network_event(event):
         "prediction": "attack" if label == 1 else "normal",
         "label": label,
         "probabilities": probabilities,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": utc_timestamp(),
         "note": (
             "Prediction uses the trained UNSW-NB15 pipeline, "
-            "including categorical encoding and imputation."
-        )
+            "including categorical encoding and imputation. "
+            "Probabilities are model estimates, not guarantees."
+        ),
     }, 200
 
 
@@ -183,30 +225,58 @@ def predict_network_event(event):
 # ============================================================
 
 class SentinelHandler(BaseHTTPRequestHandler):
+    """HTTP request handler for SENTINEL-X."""
 
     def send_json(self, data, status_code=200):
+        """Send a JSON response with consistent headers."""
+
         body = json.dumps(data, allow_nan=False).encode("utf-8")
 
         self.send_response(status_code)
-        self.send_header("Content-Type", "application/json")
+        self.send_header(
+            "Content-Type",
+            "application/json; charset=utf-8",
+        )
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 
     def read_json_body(self):
+        """Read and validate a bounded JSON request body."""
+
+        content_type = self.headers.get("Content-Type", "")
+        media_type = content_type.split(";", 1)[0].strip().lower()
+
+        if media_type != "application/json":
+            raise ValueError("Content-Type must be application/json.")
+
+        content_length = self.headers.get("Content-Length")
+
+        if content_length is None:
+            raise ValueError("Content-Length header is required.")
+
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
+            length = int(content_length)
+        except (TypeError, ValueError):
             raise ValueError("Invalid Content-Length.")
 
-        if length <= 0 or length > 100_000:
+        if length <= 0 or length > MAX_BODY_BYTES:
             raise ValueError(
-                "Request body must be between 1 and 100000 bytes."
+                f"Request body must be between 1 and "
+                f"{MAX_BODY_BYTES} bytes."
             )
 
         raw_body = self.rfile.read(length)
-        data = json.loads(raw_body.decode("utf-8"))
+
+        if len(raw_body) != length:
+            raise ValueError("Incomplete request body.")
+
+        try:
+            data = json.loads(raw_body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise ValueError("Request body must contain valid UTF-8 JSON.")
 
         if not isinstance(data, dict):
             raise ValueError("Expected a JSON object.")
@@ -214,118 +284,107 @@ class SentinelHandler(BaseHTTPRequestHandler):
         return data
 
     def do_GET(self):
+        """Handle health and API information endpoints."""
 
-        if self.path == "/":
+        path = request_path(self)
+
+        if path == "/":
             self.send_json({
                 "project": PROJECT_NAME,
                 "status": "running",
                 "message": "AI Cybersecurity Intelligence Platform",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": utc_timestamp(),
                 "available_endpoints": [
                     "GET /",
                     "GET /api/status",
                     "POST /api/analyse",
-                    "POST /api/predict"
-                ]
+                    "POST /api/predict",
+                ],
             })
 
-        elif self.path == "/api/status":
+        elif path == "/api/status":
+            model_status = (
+                "loaded"
+                if _model is not None
+                else (
+                    "model_file_available"
+                    if MODEL_PATH.is_file()
+                    else "model_file_missing"
+                )
+            )
+
             self.send_json({
                 "project": PROJECT_NAME,
                 "status": "operational",
                 "rule_engine": "ready",
-                "machine_learning": (
-                    "model_file_available"
-                    if MODEL_PATH.is_file()
-                    else "model_file_missing"
-                ),
-                "database": "not_configured"
+                "machine_learning": model_status,
+                "database": "not_configured",
+                "timestamp": utc_timestamp(),
             })
 
         else:
-            self.send_json(
-                {"error": "Endpoint not found"},
-                404
-            )
+            self.send_json({"error": "Endpoint not found"}, 404)
 
     def do_POST(self):
+        """Handle rule-based analysis and ML prediction requests."""
 
-        if self.path not in (
-            "/api/analyse",
-            "/api/predict"
-        ):
-            self.send_json(
-                {"error": "Endpoint not found"},
-                404
-            )
+        path = request_path(self)
+
+        if path not in ("/api/analyse", "/api/predict"):
+            self.send_json({"error": "Endpoint not found"}, 404)
             return
 
         try:
             event = self.read_json_body()
-
-            if self.path == "/api/analyse":
-                limits = {
-                    "failed_logins": 1_000_000,
-                    "requests_per_minute": 1_000_000_000,
-                    "bytes_sent": 1_000_000_000_000
-                }
-
-                for key, maximum in limits.items():
-                    value = event.get(key, 0)
-
-                    if (
-                        isinstance(value, bool)
-                        or not isinstance(value, (int, float))
-                        or not math.isfinite(value)
-                        or value < 0
-                        or value > maximum
-                        or not float(value).is_integer()
-                    ):
-                        self.send_json({
-                            "error": f"Invalid value for {key}"
-                        }, 400)
-                        return
-
-                self.send_json(analyse_network_event(event))
-                return
-
-            # Machine-learning prediction endpoint.
-            try:
-                result, status_code = predict_network_event(event)
-                self.send_json(result, status_code)
-
-            except FileNotFoundError as error:
-                self.send_json({
-                    "error": "Machine-learning model unavailable",
-                    "details": str(error)
-                }, 503)
-
-            except (ValueError, TypeError) as error:
-                self.send_json({
-                    "error": "Invalid model input",
-                    "details": str(error)
-                }, 400)
-
-            except Exception as error:
-                self.send_json({
-                    "error": "Prediction failed",
-                    "details": str(error)
-                }, 500)
-
-        except (
-            ValueError,
-            UnicodeDecodeError,
-            json.JSONDecodeError
-        ) as error:
+        except ValueError as error:
             self.send_json({
                 "error": "Invalid request",
-                "details": str(error)
+                "details": str(error),
+            }, 400)
+            return
+
+        if path == "/api/analyse":
+            try:
+                validate_rule_event(event)
+                self.send_json(analyse_network_event(event))
+            except ValueError as error:
+                self.send_json({
+                    "error": "Invalid rule-based input",
+                    "details": str(error),
+                }, 400)
+            return
+
+        try:
+            result, status_code = predict_network_event(event)
+            self.send_json(result, status_code)
+
+        except FileNotFoundError:
+            logger.exception("Prediction unavailable: model file missing.")
+            self.send_json({
+                "error": "Machine-learning model unavailable",
+                "details": "The trained model is not available on the server.",
+            }, 503)
+
+        except (ValueError, TypeError) as error:
+            self.send_json({
+                "error": "Invalid model input",
+                "details": str(error),
             }, 400)
 
+        except Exception:
+            logger.exception("Unexpected prediction failure.")
+            self.send_json({
+                "error": "Prediction failed",
+                "details": "An unexpected server error occurred.",
+            }, 500)
+
     def log_message(self, format_string, *args):
-        print(
-            f"[API] {self.address_string()} - "
-            f"{format_string % args}"
+        """Log HTTP access messages."""
+
+        logger.info(
+            "%s - %s",
+            self.address_string(),
+            format_string % args,
         )
 
 
@@ -341,7 +400,7 @@ if __name__ == "__main__":
     print(f"Model available: {MODEL_PATH.is_file()}")
     print(f"Server URL: http://{HOST}:{PORT}")
 
-    server = HTTPServer((HOST, PORT), SentinelHandler)
+    server = ThreadingHTTPServer((HOST, PORT), SentinelHandler)
 
     try:
         print("Server started. Press Ctrl+C to stop.")
