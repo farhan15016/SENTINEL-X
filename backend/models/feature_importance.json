@@ -1,0 +1,218 @@
+{
+  "method": "permutation_importance",
+  "scoring": "f1",
+  "sample_size": 5000,
+  "n_repeats": 3,
+  "features": [
+    {
+      "feature": "ct_dst_src_ltm",
+      "importance_mean": 0.021425,
+      "importance_std": 0.000694
+    },
+    {
+      "feature": "service",
+      "importance_mean": 0.019997,
+      "importance_std": 0.001238
+    },
+    {
+      "feature": "dmean",
+      "importance_mean": 0.017422,
+      "importance_std": 0.001208
+    },
+    {
+      "feature": "sbytes",
+      "importance_mean": 0.010816,
+      "importance_std": 0.00025
+    },
+    {
+      "feature": "smean",
+      "importance_mean": 0.009726,
+      "importance_std": 0.000207
+    },
+    {
+      "feature": "dbytes",
+      "importance_mean": 0.008201,
+      "importance_std": 0.000615
+    },
+    {
+      "feature": "ct_srv_dst",
+      "importance_mean": 0.007515,
+      "importance_std": 0.000761
+    },
+    {
+      "feature": "ct_srv_src",
+      "importance_mean": 0.00705,
+      "importance_std": 0.000409
+    },
+    {
+      "feature": "synack",
+      "importance_mean": 0.006041,
+      "importance_std": 0.000186
+    },
+    {
+      "feature": "tcprtt",
+      "importance_mean": 0.005155,
+      "importance_std": 6.3e-05
+    },
+    {
+      "feature": "sttl",
+      "importance_mean": 0.004634,
+      "importance_std": 0.000801
+    },
+    {
+      "feature": "dload",
+      "importance_mean": 0.004592,
+      "importance_std": 0.000785
+    },
+    {
+      "feature": "ct_dst_sport_ltm",
+      "importance_mean": 0.003226,
+      "importance_std": 0.000149
+    },
+    {
+      "feature": "state",
+      "importance_mean": 0.003132,
+      "importance_std": 0.000646
+    },
+    {
+      "feature": "rate",
+      "importance_mean": 0.003084,
+      "importance_std": 0.000579
+    },
+    {
+      "feature": "ct_src_ltm",
+      "importance_mean": 0.002856,
+      "importance_std": 0.001759
+    },
+    {
+      "feature": "ct_dst_ltm",
+      "importance_mean": 0.00275,
+      "importance_std": 0.000162
+    },
+    {
+      "feature": "sinpkt",
+      "importance_mean": 0.002688,
+      "importance_std": 0.000756
+    },
+    {
+      "feature": "dloss",
+      "importance_mean": 0.001957,
+      "importance_std": 0.00034
+    },
+    {
+      "feature": "djit",
+      "importance_mean": 0.001899,
+      "importance_std": 0.000544
+    },
+    {
+      "feature": "proto",
+      "importance_mean": 0.001277,
+      "importance_std": 0.000316
+    },
+    {
+      "feature": "response_body_len",
+      "importance_mean": 0.001193,
+      "importance_std": 0.000135
+    },
+    {
+      "feature": "dur",
+      "importance_mean": 0.001151,
+      "importance_std": 0.000659
+    },
+    {
+      "feature": "dpkts",
+      "importance_mean": 0.00111,
+      "importance_std": 0.000574
+    },
+    {
+      "feature": "spkts",
+      "importance_mean": 0.001047,
+      "importance_std": 0.000631
+    },
+    {
+      "feature": "dwin",
+      "importance_mean": 0.001046,
+      "importance_std": 0.000296
+    },
+    {
+      "feature": "ct_src_dport_ltm",
+      "importance_mean": 0.00093,
+      "importance_std": 0.00013
+    },
+    {
+      "feature": "ct_flw_http_mthd",
+      "importance_mean": 0.000905,
+      "importance_std": 0.000152
+    },
+    {
+      "feature": "dtcpb",
+      "importance_mean": 0.000876,
+      "importance_std": 0.00029
+    },
+    {
+      "feature": "dinpkt",
+      "importance_mean": 0.000737,
+      "importance_std": 0.000885
+    },
+    {
+      "feature": "trans_depth",
+      "importance_mean": 0.00073,
+      "importance_std": 0.000278
+    },
+    {
+      "feature": "stcpb",
+      "importance_mean": 0.000398,
+      "importance_std": 0.000316
+    },
+    {
+      "feature": "sload",
+      "importance_mean": 0.000196,
+      "importance_std": 0.000711
+    },
+    {
+      "feature": "sjit",
+      "importance_mean": 8.9e-05,
+      "importance_std": 0.000107
+    },
+    {
+      "feature": "ct_ftp_cmd",
+      "importance_mean": 0.0,
+      "importance_std": 0.0
+    },
+    {
+      "feature": "is_sm_ips_ports",
+      "importance_mean": -5.2e-05,
+      "importance_std": 7.4e-05
+    },
+    {
+      "feature": "is_ftp_login",
+      "importance_mean": -0.000157,
+      "importance_std": 0.0
+    },
+    {
+      "feature": "ackdat",
+      "importance_mean": -0.000262,
+      "importance_std": 0.000455
+    },
+    {
+      "feature": "dttl",
+      "importance_mean": -0.001479,
+      "importance_std": 0.000625
+    },
+    {
+      "feature": "sloss",
+      "importance_mean": -0.001582,
+      "importance_std": 0.000256
+    },
+    {
+      "feature": "ct_state_ttl",
+      "importance_mean": -0.002335,
+      "importance_std": 0.000249
+    },
+    {
+      "feature": "swin",
+      "importance_mean": -0.002854,
+      "importance_std": 9e-05
+    }
+  ]
+}
