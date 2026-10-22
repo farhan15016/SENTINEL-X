@@ -49,6 +49,19 @@ type MlPrediction = {
   timestamp?: string
 }
 
+type AnomalyPrediction = {
+  project?: string
+  engine: string
+  prediction: string
+  label: number
+  anomaly_score?: number
+  contamination?: number
+  note?: string
+  timestamp?: string
+  error?: string
+  details?: string
+}
+
 // A fixed demonstration flow record. This is not live network traffic.
 const DEMO_ML_RECORD: Record<string, string | number> = {
   dur: 0.000011,
@@ -109,15 +122,27 @@ const MODEL_METRICS = [
     ],
   },
   {
-    name: 'Isolation Forest',
-    type: 'Unsupervised learning',
-    accuracy: 55.3,
+    name: 'Isolation Forest (baseline)',
+    type: 'Unsupervised learning · contamination 0.01',
+    accuracy: 55.30,
     precision: 96.43,
     recall: 19.53,
     f1: 32.48,
     matrix: [
       [36672, 328],
       [36478, 8854],
+    ],
+  },
+  {
+    name: 'Isolation Forest (tuned)',
+    type: 'Unsupervised learning · contamination 0.20',
+    accuracy: 70.66,
+    precision: 76.06,
+    recall: 68.17,
+    f1: 71.90,
+    matrix: [
+      [27273, 9727],
+      [14428, 30904],
     ],
   },
 ]
@@ -150,6 +175,9 @@ const [mlResult, setMlResult] = useState<MlPrediction | null>(null)
 
 const [mlLoading, setMlLoading] = useState(false)
 const [mlError, setMlError] = useState('')
+  const [anomalyResult, setAnomalyResult] = useState<AnomalyPrediction | null>(null)
+  const [anomalyLoading, setAnomalyLoading] = useState(false)
+  const [anomalyError, setAnomalyError] = useState('')
   async function checkStatus() {
     try {
       const response = await fetch(`${API_BASE}/api/status`)
@@ -270,6 +298,35 @@ const [mlError, setMlError] = useState('')
       )
     } finally {
       setMlLoading(false)
+    }
+  }
+
+  async function runAnomalyPrediction() {
+    setAnomalyLoading(true)
+    setAnomalyError('')
+    setAnomalyResult(null)
+
+    try {
+      const response = await fetch(`${API_BASE}/api/anomaly`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(DEMO_ML_RECORD),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(
+          data.details || data.error || `Anomaly detection failed (HTTP ${response.status})`,
+        )
+      }
+      setAnomalyResult(data as AnomalyPrediction)
+    } catch (error) {
+      setAnomalyError(
+        error instanceof Error
+          ? `${error.message}. Confirm the backend and /api/anomaly endpoint are available.`
+          : 'Unable to contact the Isolation Forest API.',
+      )
+    } finally {
+      setAnomalyLoading(false)
     }
   }
 
@@ -593,9 +650,8 @@ const [mlError, setMlError] = useState('')
               <div className="note-box">
                 <strong>Demonstration record</strong>
                 <p>
-                  This button submits a fixed example record with all 42 required
-                  features. It does not capture live network traffic and is not
-                  a replacement for entering a measured network flow.
+                  Both detection buttons submit the same fixed example record with
+                  all 42 required features. This prototype does not capture live traffic.
                 </p>
               </div>
 
@@ -614,17 +670,12 @@ const [mlError, setMlError] = useState('')
                 {mlLoading ? 'Running prediction…' : 'Run Random Forest prediction →'}
               </button>
 
-              {!isOnline && (
-                <p className="ml-helper">Backend is offline. Start the API before running a prediction.</p>
-              )}
               {mlError && <div className="error-box">{mlError}</div>}
-
               {mlResult && (
                 <div className={`ml-prediction-result ${mlResult.prediction === 'attack' ? 'ml-attack' : 'ml-normal'}`}>
-                  <p className="eyebrow">PREDICTION RESULT</p>
+                  <p className="eyebrow">RANDOM FOREST RESULT</p>
                   <h3>{mlResult.prediction === 'attack' ? '⚠ Attack predicted' : '✓ Normal traffic predicted'}</h3>
                   <p>Engine: {mlResult.engine} · Label: {mlResult.label}</p>
-
                   {mlResult.probabilities && (
                     <div className="ml-probability-list">
                       {Object.entries(mlResult.probabilities).map(([classLabel, probability]) => (
@@ -640,11 +691,52 @@ const [mlError, setMlError] = useState('')
                       ))}
                     </div>
                   )}
-
                   {mlResult.note && <p className="matrix-caption">{mlResult.note}</p>}
                   {mlResult.timestamp && <p className="matrix-caption">Evaluated: {new Date(mlResult.timestamp).toLocaleString()}</p>}
                 </div>
               )}
+
+              <div className="evaluation-heading anomaly-section-heading">
+                <p className="eyebrow">UNSUPERVISED ANOMALY DETECTION</p>
+                <h2>Isolation Forest</h2>
+                <p className="panel-description">
+                  Uses the separately trained tuned model (contamination 0.20) to
+                  identify unusual records. An anomaly is not definitive proof of an attack.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="analyse-button"
+                onClick={() => void runAnomalyPrediction()}
+                disabled={anomalyLoading || !isOnline}
+              >
+                {anomalyLoading ? 'Checking for anomalies…' : 'Run Isolation Forest anomaly detection →'}
+              </button>
+
+              {anomalyError && <div className="error-box">{anomalyError}</div>}
+              {anomalyResult && (
+                <div className={`ml-prediction-result ${anomalyResult.prediction === 'attack' ? 'ml-attack' : 'ml-normal'}`}>
+                  <p className="eyebrow">ISOLATION FOREST RESULT</p>
+                  <h3>{anomalyResult.prediction === 'attack' ? '⚠ Anomalous traffic predicted' : '✓ No anomaly predicted'}</h3>
+                  <p>Engine: {anomalyResult.engine} · Label: {anomalyResult.label}</p>
+                  <div className="ml-record-summary anomaly-metrics">
+                    <div>
+                      <span>Anomaly score</span>
+                      <strong>{typeof anomalyResult.anomaly_score === 'number' ? anomalyResult.anomaly_score.toFixed(5) : 'N/A'}</strong>
+                    </div>
+                    <div>
+                      <span>Contamination</span>
+                      <strong>{typeof anomalyResult.contamination === 'number' ? `${(anomalyResult.contamination * 100).toFixed(0)}%` : 'N/A'}</strong>
+                    </div>
+                    <div><span>Model</span><strong>Tuned Isolation Forest</strong></div>
+                  </div>
+                  {anomalyResult.note && <p className="matrix-caption">{anomalyResult.note}</p>}
+                  {anomalyResult.timestamp && <p className="matrix-caption">Evaluated: {new Date(anomalyResult.timestamp).toLocaleString()}</p>}
+                </div>
+              )}
+
+              {!isOnline && <p className="ml-helper">Backend is offline. Start the API before running either model.</p>}
             </div>
           </section>
         )}
@@ -692,9 +784,9 @@ const [mlError, setMlError] = useState('')
                 <div className="engine-detail-copy">
                   <h3>Isolation Forest</h3>
                   <p>Experimental unsupervised anomaly detection.</p>
-                  <small>Model comparison is available in the local research artifacts; this UI does not call it yet.</small>
+                  <small>Integrated through the backend POST /api/anomaly endpoint.</small>
                 </div>
-                <span className="engine-state muted">EXPERIMENTAL</span>
+                <span className={`engine-state ${isOnline ? '' : 'muted'}`}>{isOnline ? 'INTEGRATED' : 'CHECK'}</span>
               </div>
 
               <div className="note-box">
@@ -908,8 +1000,9 @@ function ModelEvaluation() {
         <p className="eyebrow">HELD-OUT TEST SET</p>
         <h2>Model performance</h2>
         <p className="panel-description">
-          Comparison of supervised and unsupervised detection approaches
-          on the UNSW-NB15 test dataset.
+          Random Forest and Isolation Forest baseline/tuned results on the
+          UNSW-NB15 test dataset. The tuned contamination was selected using
+          a separate validation split before evaluation on the official test set.
         </p>
       </div>
 
@@ -922,7 +1015,7 @@ function ModelEvaluation() {
                 <p>{model.type}</p>
               </div>
               <span className="model-tag">
-                {model.name === 'Random Forest' ? 'PRIMARY' : 'EXPERIMENTAL'}
+                {model.name === 'Random Forest' ? 'PRIMARY' : model.name.includes('(tuned)') ? 'TUNED EXPERIMENT' : 'BASELINE'}
               </span>
             </div>
 
@@ -979,6 +1072,17 @@ function ModelEvaluation() {
               </div>
             )
           })}
+        </div>
+
+        <div className="note-box">
+          <strong>Isolation Forest tuning result</strong>
+          <p>
+            The tuned experiment uses contamination=0.20, selected on a separate
+            validation split. On the official test set it achieved 71.90% attack
+            F1 and 68.17% attack recall, compared with 32.48% F1 and 19.53% recall
+            for the baseline contamination=0.01 model. This is an experimental
+            evaluation; it does not overwrite the saved baseline model used by the API.
+          </p>
         </div>
 
         <div className="note-box">
