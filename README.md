@@ -1,112 +1,131 @@
-
 # SENTINEL-X 🛡️
+
 ### AI-Powered Cybersecurity Threat Detection Platform
 
-SENTINEL-X is a cybersecurity project designed to analyse network traffic, identify suspicious activity, and generate alerts for potential threats.
+SENTINEL-X is an educational cybersecurity prototype that analyses network-event data to identify suspicious activity. It combines rule-based detection with supervised machine learning and unsupervised anomaly detection, presented through a React dashboard.
 
-The project is being developed as a lightweight security intelligence platform, with a focus on explainable detection, machine learning, and network intrusion analysis.
+## Features
 
-## 🎯 Project Objectives
+- **Rule-based detection:** Identifies suspicious events using configurable detection rules.
+- **Random Forest classifier:** Predicts normal or attack traffic using the UNSW-NB15 dataset.
+- **Isolation Forest anomaly detection:** Detects anomalous traffic patterns using a separately trained, tuned unsupervised model.
+- **Model evaluation:** Reports accuracy, attack precision, attack recall, F1-score and confusion matrices.
+- **Feature importance:** Highlights input features that influence Random Forest predictions.
+- **REST-style JSON API:** Exposes analysis, prediction, batch-prediction and anomaly-detection endpoints.
+- **Security dashboard:** React, TypeScript and Vite frontend for viewing model results and project metrics.
+- **Input validation and automated tests:** Includes request validation and backend regression checks.
 
-- Detect suspicious network behaviour.
-- Identify potential brute-force login attempts.
-- Flag unusually high request rates.
-- Detect unusually large outbound data transfers.
-- Explore machine-learning-based intrusion detection using the UNSW-NB15 dataset.
-- Present security findings through a future interactive dashboard.
+## Technology Stack
 
-## ✅ Current Features
+- Python
+- scikit-learn and joblib
+- React, TypeScript and Vite
+- Python standard-library HTTP server
+- UNSW-NB15 network intrusion detection dataset
+- Git and GitHub
 
-- Rule-based network event analysis.
-- Detection of multiple failed login attempts.
-- High request-rate detection.
-- Large outbound data-transfer detection.
-- JSON API built with Python's standard library.
-- Input validation and structured JSON responses.
-- Automated tests for four representative scenarios.
+## Architecture
 
-## 🧠 Planned Features
+1. Network-event features are submitted to the backend API.
+2. The rule engine evaluates events against configured rules.
+3. The Random Forest model performs supervised classification.
+4. The tuned Isolation Forest model performs unsupervised anomaly detection.
+5. The frontend presents predictions and evaluation metrics.
 
-- Supervised machine-learning classification.
-- Unsupervised anomaly detection.
-- Evaluation using precision, recall, F1-score, and a confusion matrix.
-- Interactive security dashboard.
-- Alert history and visual analytics.
+## Dataset
 
-## 🧰 Technology Stack
+SENTINEL-X uses the UNSW-NB15 dataset for model training and evaluation.
 
-- **Language:** Python
-- **Backend:** Python HTTP server and JSON API
-- **Dataset:** UNSW-NB15
-- **Version control:** Git and GitHub
-- **Planned frontend:** React, TypeScript, and Vite
-- **Planned storage:** SQLite
-
-## 📊 Dataset
-
-SENTINEL-X uses the UNSW-NB15 network intrusion detection dataset for research and experimentation.
-
-The training and testing CSV files are stored locally and excluded from this repository to avoid uploading large dataset files.
+The training and testing CSV files are stored locally and excluded from Git. Obtain the dataset through its official source and follow its documentation and citation requirements.
 
 Dataset source: [UNSW-NB15 — UNSW Canberra](https://research.unsw.edu.au/projects/unsw-nb15-dataset)
 
-Please consult the dataset's documentation and citation requirements before using or redistributing its contents.
+## Model Evaluation
 
-## 🚀 Running the Backend
+The following results were recorded on the project's official test set.
 
-Requirements: Python 3.10 or later.
+| Metric | Random Forest | Isolation Forest (baseline) | Isolation Forest (tuned) |
+|---|---:|---:|---:|
+| Accuracy | 90.73% | 55.30% | 70.66% |
+| Attack precision | 87.63% | 96.43% | 76.06% |
+| Attack recall | 96.83% | 19.53% | 68.17% |
+| Attack F1-score | 92.00% | 32.48% | 71.90% |
 
-From the project root, run:
+The tuned Isolation Forest uses a contamination setting of 0.20, selected using a separate validation split. The `/api/anomaly` endpoint uses the tuned model. Baseline results are retained for comparison.
+
+These metrics reflect evaluation on UNSW-NB15 data; they do not establish performance on live network traffic.
+
+## Requirements
+
+- Python 3.10 or later
+- Node.js and npm
+- Local UNSW-NB15 dataset files for model training or retraining
+
+Use the Python environment and dependency versions configured for this project where possible.
+
+## Run the Backend
+
+From the project root:
 
 ```bash
-python3 backend/app.py
+source .venv/bin/activate
+python backend/app.py
 ```
 
-The server starts at:
+The backend runs at `http://127.0.0.1:8000`.
 
-`http://127.0.0.1:8000`
+## Run the Frontend
 
-### Available Endpoints
+Open a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the local URL printed by Vite, usually `http://localhost:5173`.
+
+## API Endpoints
 
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | `/` | Project information |
 | GET | `/api/status` | Backend status |
-| POST | `/api/analyse` | Analyse a network event |
+| POST | `/api/analyse` | Rule-based network-event analysis |
+| POST | `/api/predict` | Random Forest prediction |
+| POST | `/api/predict-batch` | Batch Random Forest predictions |
+| POST | `/api/anomaly` | Tuned Isolation Forest anomaly detection |
 
-### Example Network Event
+Prediction endpoints require request data matching the input schema expected by the backend. For machine-learning predictions, provide the required dataset features.
 
-Send a JSON request to `POST /api/analyse`:
+## Testing
 
-```json
-{
-  "failed_logins": 15,
-  "requests_per_minute": 120,
-  "bytes_sent": 5000
-}
-```
-
-The current rule engine should flag this event because it contains at least 10 failed login attempts.
-
-## 🧪 Testing
-
-Run the existing detector tests from the project root:
+From the project root:
 
 ```bash
-python3 backend/test_detector.py
+source .venv/bin/activate
+python -m pytest -q
+python -m compileall -q backend
 ```
 
-The initial test suite covers brute-force login attempts, high request rates, large outbound transfers, and normal network activity.
+Build-check the frontend:
 
-## ⚠️ Project Status
+```bash
+cd frontend
+npm run build
+```
 
-SENTINEL-X is under active development.
+The backend test suite has passed with **8 tests** in the current verified run.
 
-The current implementation uses transparent, threshold-based rules. Machine-learning models, the frontend dashboard, and database integration are planned components and should not be considered implemented until they are built and tested.
+## Important Limitations
 
-This project is intended for educational and research purposes. It is not a substitute for a production security monitoring system.
+- The dashboard currently uses a fixed demonstration record for its model-prediction buttons; it does not capture live network traffic.
+- An anomaly prediction is not definitive proof of a cyberattack.
+- The Isolation Forest tuning results are experimental and require validation on additional real-world traffic.
+- This prototype is intended for educational and research purposes, not as a replacement for a production security monitoring system.
 
-## 👨‍💻 Author
+## Author
 
 Farhan
 

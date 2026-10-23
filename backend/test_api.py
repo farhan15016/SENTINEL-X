@@ -1,4 +1,7 @@
+from unittest.mock import patch
+import math
 
+from app import detect_network_anomaly
 import unittest
 
 from app import analyse_network_event, validate_rule_event
@@ -103,6 +106,52 @@ class TestSentinelRuleEngine(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_rule_event(event)
 
+class TestIsolationForestAnomalyDetection(unittest.TestCase):
 
+    def test_missing_features_returns_400(self):
+        mock_model = type(
+            "MockModel",
+            (),
+            {"feature_names_in_": ["feature_a", "feature_b"]},
+        )()
+
+        with patch("app.load_anomaly_model", return_value=mock_model):
+            result, status_code = detect_network_anomaly(
+                {"feature_a": 1.0}
+            )
+
+        self.assertEqual(status_code, 400)
+        self.assertEqual(result["error"], "Missing required model features")
+        self.assertEqual(result["missing_features"], ["feature_b"])
+
+    def test_boolean_feature_is_rejected(self):
+        mock_model = type(
+            "MockModel",
+            (),
+            {"feature_names_in_": ["feature_a"]},
+        )()
+
+        with patch("app.load_anomaly_model", return_value=mock_model):
+            with self.assertRaises(ValueError):
+                detect_network_anomaly({"feature_a": True})
+
+    def test_non_finite_feature_is_rejected(self):
+        mock_model = type(
+            "MockModel",
+            (),
+            {"feature_names_in_": ["feature_a"]},
+        )()
+
+        with patch("app.load_anomaly_model", return_value=mock_model):
+            with self.assertRaises(ValueError):
+                detect_network_anomaly({"feature_a": math.nan})
+
+    def test_missing_model_is_propagated(self):
+        with patch(
+            "app.load_anomaly_model",
+            side_effect=FileNotFoundError("model missing"),
+        ):
+            with self.assertRaises(FileNotFoundError):
+                detect_network_anomaly({})
 if __name__ == "__main__":
     unittest.main()
