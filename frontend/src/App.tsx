@@ -783,7 +783,7 @@ const [mlError, setMlError] = useState('')
                 <div className="engine-icon">03</div>
                 <div className="engine-detail-copy">
                   <h3>Isolation Forest</h3>
-                  <p>Experimental unsupervised anomaly detection.</p>
+                  <p>Unsupervised anomaly detection using the tuned Isolation Forest model. Integrated through the backend /api/anomaly endpoint; results are experimental and require validation against real-world traffic.</p>
                   <small>Integrated through the backend POST /api/anomaly endpoint.</small>
                 </div>
                 <span className={`engine-state ${isOnline ? '' : 'muted'}`}>{isOnline ? 'INTEGRATED' : 'CHECK'}</span>
@@ -1077,11 +1077,7 @@ function ModelEvaluation() {
         <div className="note-box">
           <strong>Isolation Forest tuning result</strong>
           <p>
-            The tuned experiment uses contamination=0.20, selected on a separate
-            validation split. On the official test set it achieved 71.90% attack
-            F1 and 68.17% attack recall, compared with 32.48% F1 and 19.53% recall
-            for the baseline contamination=0.01 model. This is an experimental
-            evaluation; it does not overwrite the saved baseline model used by the API.
+The tuned Isolation Forest model uses contamination=0.20, selected on a separate validation split. On the official test set, it achieved 71.90% attack F1 and 68.17% attack recall, compared with 32.48% F1 and 19.53% recall for the baseline contamination=0.01 model. The tuned model is used by the `/api/anomaly` endpoint; baseline results are retained for comparison. This remains an experimental evaluation and requires validation on real-world traffic.
           </p>
         </div>
 
